@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laxmi Dairy — Admin</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #FFFDF7; color: #2B2118; }
+  header { background: #FFFDF7; border-bottom: 4px solid #FFB627; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .logo { font-size: 20px; font-weight: 800; color: #1F6B41; }
+  a.navlink, .navlink { font-size: 13px; font-weight: 700; color: #2B2118cc; text-decoration: none; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 20px; }
+  .panel { background: white; border: 2px solid #FFF3D6; border-radius: 22px; padding: 26px; max-width: 380px; margin: 60px auto; }
+  .field input { width: 100%; border: 2px solid #FFF3D6; border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
+  .field input:focus { outline: none; border-color: #2F8F5B; }
+  .btn { background: #2F8F5B; color: white; border: none; border-radius: 999px; padding: 12px; font-weight: 800; font-size: 14px; cursor: pointer; width: 100%; }
+  .btn.small { width: auto; padding: 8px 16px; font-size: 12px; }
+  .btn.ghost { background: #FFF3D6; color: #2B2118; }
+  .err { color: #E85D75; font-weight: 700; font-size: 13px; margin: 8px 0; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .filter-btn { padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 800; border: 2px solid #FFF3D6; background: white; color: #2B211899; cursor: pointer; }
+  .filter-btn.active { background: #2F8F5B; border-color: #2F8F5B; color: white; }
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; border: 2px solid #FFF3D6; }
+  th, td { text-align: left; padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #FFF3D680; }
+  th { color: #2B211870; font-weight: 800; font-size: 11px; text-transform: uppercase; }
+  .oid { font-weight: 800; color: #B5482B; }
+  select.status { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 4px 8px; border: none; }
+  .viewlink { color: #1F6B41; font-weight: 800; text-decoration: underline; cursor: pointer; }
+  .modal-bg { position: fixed; inset: 0; background: #2B211866; display: none; align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .modal-bg.open { display: flex; }
+  .modal { background: white; border-radius: 20px; max-width: 420px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 22px; position: relative; }
+  .modal .close { position: absolute; top: 12px; right: 16px; font-size: 26px; cursor: pointer; color: #2B211870; }
+  #label { border: 3px dashed #2B211840; border-radius: 14px; padding: 18px; }
+  #label .brand { font-weight: 800; color: #1F6B41; }
+  #label .addr { font-size: 13px; margin-top: 8px; line-height: 1.5; }
+  @media print { body * { visibility: hidden; } #label, #label * { visibility: visible; } #label { position: absolute; top: 0; left: 0; width: 100%; border: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🐄 Laxmi Dairy — Admin</div>
+  <a class="navlink" href="index.html">← Back to store</a>
+</header>
+
+<div id="loginPanel" class="panel">
+  <h2 style="margin-bottom:14px;font-weight:800;font-size:20px">Admin Login</h2>
+  <div class="field"><input id="password" type="password" placeholder="Admin password"></div>
+  <div class="err" id="loginErr"></div>
+  <button class="btn" onclick="login()">Login</button>
+</div>
+
+<main id="dashboard" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <h1 style="font-size:24px;font-weight:800">Orders Dashboard</h1>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost small" onclick="loadOrders()">↻ Refresh</button>
+      <button class="btn ghost small" onclick="logout()">Logout</button>
+    </div>
+  </div>
+  <div class="filters" id="filters"></div>
+  <div id="tableWrap"><p class="err" id="loadErr"></p></div>
+</main>
+
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <div id="label"></div>
+    <div id="modalMeta" style="font-size:13px;margin-top:12px;color:#2B211899"></div>
+    <button class="btn" style="margin-top:14px" onclick="window.print()">🖨️ Print Shipping Label</button>
+  </div>
+</div>
+
+<script>
+const STATUS_OPTIONS = ["Payment Submitted","Confirmed","Packed","Shipped","Delivered","Cancelled"];
+const STATUS_BG = {
+  "Payment Submitted": "#FFF3D6", "Confirmed": "#DCEEFF", "Packed": "#F0E6FF",
+  "Shipped": "#FFE7D1", "Delivered": "#DFF5E3", "Cancelled": "#FFE1E1"
+};
+
+let adminKey = sessionStorage.getItem('laxmi-admin-key') || null;
+let orders = [];
+let filter = "All";
+
+if(adminKey) showDashboard();
+
+async function login(){
+  const password = document.getElementById('password').value;
+  const res = await fetch('/api/admin-login', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password})
+  });
+  const data = await res.json();
+  if(!res.ok){ document.getElementById('loginErr').textContent = data.error || "Login failed."; return; }
+  adminKey = data.key;
+  sessionStorage.setItem('laxmi-admin-key', adminKey);
+  showDashboard();
+}
+
+function logout(){
+  sessionStorage.removeItem('laxmi-admin-key');
+  adminKey = null;
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('loginPanel').style.display = 'block';
+}
+
+function showDashboard(){
+  document.getElementById('loginPanel').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  renderFilters();
+  loadOrders();
+}
+
+function renderFilters(){
+  const all = ["All", ...STATUS_OPTIONS];
+  document.getElementById('filters').innerHTML = all.map(s => `
+    <button class="filter-btn ${filter===s?'active':''}" onclick="setFilter('${s}')">${s}${s!=='All' ? ' ('+orders.filter(o=>o.status===s).length+')' : ''}</button>
+  `).join('');
+}
+function setFilter(s){ filter = s; renderFilters(); renderTable(); }
+
+async function loadOrders(){
+  document.getElementById('tableWrap').innerHTML = `<p class="hint">Loading orders...</p>`;
+  try {
+    const res = await fetch('/api/orders', { headers: {'x-admin-key': adminKey} });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || "Failed to load orders.");
+    orders = data.orders;
+    renderFilters();
+    renderTable();
+  } catch(e) {
+    document.getElementById('tableWrap').innerHTML = `<p class="err">${e.message}</p>`;
+  }
+}
+
+function renderTable(){
+  const list = filter==="All" ? orders : orders.filter(o=>o.status===filter);
+  if(list.length===0){
+    document.getElementById('tableWrap').innerHTML = `<p style="color:#2B211870;text-align:center;padding:30px">No orders here yet.</p>`;
+    return;
+  }
+  document.getElementById('tableWrap').innerHTML = `
+    <table>
+      <thead><tr><th>Order ID</th><th>Customer</th><th>Phone</th><th>Village/District</th><th>Total</th><th>Status</th><th>Placed</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(o => `
+          <tr>
+            <td class="oid">${o.order_id}</td>
+            <td>${o.customer_name}</td>
+            <td>${o.phone}</td>
+            <td>${o.village}, ${o.district}</td>
+            <td><b>₹${o.total}</b></td>
+            <td><select class="status" style="background:${STATUS_BG[o.status]}" onchange="updateStatus('${o.order_id}', this.value)">
+              ${STATUS_OPTIONS.map(s => `<option value="${s}" ${s===o.status?'selected':''}>${s}</option>`).join('')}
+            </select></td>
+            <td>${new Date(o.created_at).toLocaleDateString('en-IN')}</td>
+            <td><span class="viewlink" onclick='openLabel(${JSON.stringify(o).replace(/'/g,"&#39;")})'>View / Print</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function updateStatus(orderId, status){
+  const res = await fetch('/api/order-status', {
+    method:'POST', headers:{'Content-Type':'application/json', 'x-admin-key':adminKey},
+    body: JSON.stringify({orderId, status})
+  });
+  if(res.ok){
+    const o = orders.find(x=>x.order_id===orderId);
+    if(o) o.status = status;
+    renderFilters();
+  }
+}
+
+function openLabel(o){
+  document.getElementById('label').innerHTML = `
+    <div class="brand">🐄 Laxmi Dairy</div>
+    <div style="font-size:11px;color:#2B211888">Ranjini Village, Kubeer Mandal<br>Nirmal District, Telangana</div>
+    <div style="font-size:11px;color:#2B211870;margin-top:10px">Order ID</div>
+    <div class="oid" style="font-size:16px">${o.order_id}</div>
+    <div style="font-size:11px;color:#2B211870;margin-top:10px;text-transform:uppercase;font-weight:800">Ship To</div>
+    <div style="font-weight:800;font-size:18px">${o.customer_name}</div>
+    <div class="addr">
+      ${o.house_no ? o.house_no+', ' : ''}${o.street ? o.street+', ' : ''}${o.landmark ? 'Near '+o.landmark+', ' : ''}<br>
+      ${o.village}${o.mandal ? ', '+o.mandal+' Mandal' : ''}<br>
+      ${o.district} District, ${o.state} - ${o.pincode}
+    </div>
+    <div style="font-weight:700;margin-top:8px">📞 ${o.phone}</div>
+    <div style="border-top:2px dashed #2B211820;margin-top:12px;padding-top:12px">
+      ${o.items.map(i => `<div style="display:flex;justify-content:space-between;font-size:13px"><span>${i.name} × ${i.qty}</span><span>₹${i.price*i.qty}</span></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;font-weight:800;margin-top:6px;border-top:1px solid #2B211820;padding-top:6px"><span>Total</span><span>₹${o.total}</span></div>
+    </div>
+  `;
+  document.getElementById('modalMeta').innerHTML = `
+    Payment ref: ${o.payment_ref}<br>Status: ${o.status}<br>Placed: ${new Date(o.created_at).toLocaleString('en-IN')}
+  `;
+  document.getElementById('modalBg').classList.add('open');
+}
+function closeModal(){ document.getElementById('modalBg').classList.remove('open'); }
+</script>
+</body>
+</html>
