@@ -46,7 +46,7 @@
 
 <div id="loginPanel" class="panel">
   <h2 style="margin-bottom:14px;font-weight:800;font-size:20px">Admin Login</h2>
-  <div class="field"><input id="password" type="password" placeholder="Admin password"></div>
+  <div class="field"><input id="password" type="password" placeholder="Admin password" onkeydown="if(event.key==='Enter') login()"></div>
   <div class="err" id="loginErr"></div>
   <button class="btn" onclick="login()">Login</button>
 </div>
@@ -86,15 +86,22 @@ let filter = "All";
 if(adminKey) showDashboard();
 
 async function login(){
+  const errEl = document.getElementById('loginErr');
+  errEl.textContent = "";
   const password = document.getElementById('password').value;
-  const res = await fetch('/api/admin-login', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password})
-  });
-  const data = await res.json();
-  if(!res.ok){ document.getElementById('loginErr').textContent = data.error || "Login failed."; return; }
-  adminKey = data.key;
-  sessionStorage.setItem('laxmi-admin-key', adminKey);
-  showDashboard();
+  if(!password){ errEl.textContent = "Please enter the admin password."; return; }
+  try {
+    const res = await fetch('/api/admin-login', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password})
+    });
+    const data = await res.json();
+    if(!res.ok){ errEl.textContent = data.error || "Login failed."; return; }
+    adminKey = data.key;
+    sessionStorage.setItem('laxmi-admin-key', adminKey);
+    showDashboard();
+  } catch(e) {
+    errEl.textContent = "Could not reach the server. Make sure you're opening this page through your live Vercel link (https://your-site.vercel.app/admin.html), not by double-clicking the file on your computer.";
+  }
 }
 
 function logout(){
